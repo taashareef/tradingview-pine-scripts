@@ -83,16 +83,21 @@ if not na(pivotLow) and barstate.isconfirmed
 // رسم الزقزاق / Draw ZigZag
 // ========================================
 
+// بناء نقاط الزقزاق / Build zigzag points - declared outside to avoid recreation
+var array<float> allPrices = array.new_float(0)
+var array<int> allBars = array.new_int(0)
+var array<bool> allIsHigh = array.new_bool(0)
+
 if barstate.islast and array.size(pivotHighPrices) > 0 and array.size(pivotLowPrices) > 0
     // مسح الخطوط القديمة / Clear old lines
     for i = 0 to array.size(zigzagLines) - 1
         line.delete(array.get(zigzagLines, i))
     array.clear(zigzagLines)
     
-    // بناء نقاط الزقزاق / Build zigzag points
-    var array<float> allPrices = array.new_float(0)
-    var array<int> allBars = array.new_int(0)
-    var array<bool> allIsHigh = array.new_bool(0)
+    // مسح المصفوفات للاستخدام الجديد / Clear arrays for reuse
+    array.clear(allPrices)
+    array.clear(allBars)
+    array.clear(allIsHigh)
     
     // دمج القمم والقيعان / Merge highs and lows
     for i = 0 to math.min(array.size(pivotHighPrices) - 1, 50)
@@ -107,23 +112,25 @@ if barstate.islast and array.size(pivotHighPrices) > 0 and array.size(pivotLowPr
             array.push(allBars, array.get(pivotLowBars, i))
             array.push(allIsHigh, false)
     
-    // ترتيب حسب الوقت / Sort by time
+    // ترتيب حسب الوقت / Sort by time using insertion sort (more efficient than bubble sort)
     if array.size(allBars) > 1
-        for i = 0 to array.size(allBars) - 2
-            for j = i + 1 to array.size(allBars) - 1
-                if array.get(allBars, i) < array.get(allBars, j)
-                    // تبديل / Swap
-                    tempPrice = array.get(allPrices, i)
-                    tempBar = array.get(allBars, i)
-                    tempIsHigh = array.get(allIsHigh, i)
-                    
-                    array.set(allPrices, i, array.get(allPrices, j))
-                    array.set(allBars, i, array.get(allBars, j))
-                    array.set(allIsHigh, i, array.get(allIsHigh, j))
-                    
-                    array.set(allPrices, j, tempPrice)
-                    array.set(allBars, j, tempBar)
-                    array.set(allIsHigh, j, tempIsHigh)
+        for i = 1 to array.size(allBars) - 1
+            keyPrice = array.get(allPrices, i)
+            keyBar = array.get(allBars, i)
+            keyIsHigh = array.get(allIsHigh, i)
+            j = i - 1
+            
+            // Shift elements that are less than key to the right
+            while j >= 0 and array.get(allBars, j) < keyBar
+                array.set(allPrices, j + 1, array.get(allPrices, j))
+                array.set(allBars, j + 1, array.get(allBars, j))
+                array.set(allIsHigh, j + 1, array.get(allIsHigh, j))
+                j := j - 1
+            
+            // Insert key at the correct position
+            array.set(allPrices, j + 1, keyPrice)
+            array.set(allBars, j + 1, keyBar)
+            array.set(allIsHigh, j + 1, keyIsHigh)
     
     // رسم خطوط الزقزاق / Draw zigzag lines
     if array.size(allBars) > 1
@@ -264,14 +271,14 @@ var string detectedPattern = ''
 var float harmonyScore = 0.0
 var box przBox = na
 
-if barstate.islast and array.size(pivotHighPrices) >= 3 and array.size(pivotLowPrices) >= 3
+if barstate.islast and array.size(pivotHighPrices) >= 4 and array.size(pivotLowPrices) >= 5
     // مسح الملصقات القديمة / Clear old labels
     for i = 0 to array.size(patternLabels) - 1
         label.delete(array.get(patternLabels, i))
     array.clear(patternLabels)
     
     // محاولة إيجاد نمط صعودي / Try to find bullish pattern
-    if array.size(pivotLowPrices) >= 3 and array.size(pivotHighPrices) >= 2
+    if array.size(pivotLowPrices) >= 5 and array.size(pivotHighPrices) >= 4
         // X=Low, A=High, B=Low, C=High, D=Low
         xPrice = array.get(pivotLowPrices, 4)
         xBar = array.get(pivotLowBars, 4)

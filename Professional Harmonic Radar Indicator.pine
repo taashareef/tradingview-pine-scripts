@@ -1,0 +1,484 @@
+//@version=5
+indicator('Professional Harmonic Radar', shorttitle='Harmonic Radar Pro', overlay=true, max_bars_back=1000, max_lines_count=500, max_labels_count=500)
+
+// ========================================
+// المدخلات / Input Settings
+// ========================================
+
+// خوارزمية الزقزاق / ZigZag Algorithm Settings
+max_array_size = input.int(200, 'Maximum Array Size', step=20, minval=20, maxval=500)
+zigzag1Length = input.int(10, 'ZigZag Length', step=5, minval=3, maxval=50)
+zigzag1Color = input.color(color.teal, 'ZigZag Color')
+zigzag1Width = 1
+
+// إعدادات النماذج الهارمونية / Harmonic Pattern Settings
+strictMode = input.bool(true, 'Strict Mode (±3% tolerance)')
+tolerance = strictMode ? 0.03 : 0.05  // هامش الخطأ / Error margin
+
+// إعدادات التصميم / Design Settings
+colorScheme = input.string('Gold/Gray', 'Color Scheme', options=['Gold/Gray', 'Teal/Silver'])
+showLabels = input.bool(true, 'Show Ratio Labels')
+showPRZ = input.bool(true, 'Show PRZ (Potential Reversal Zone)')
+fillTransparency = input.int(85, 'Fill Transparency', minval=70, maxval=95)
+
+// الألوان / Colors
+bullishColor = colorScheme == 'Gold/Gray' ? color.new(#FFD700, 30) : color.new(#008B8B, 30)
+bearishColor = colorScheme == 'Gold/Gray' ? color.new(#808080, 30) : color.new(#C0C0C0, 30)
+przColor = color.new(bullishColor, fillTransparency)
+
+// ========================================
+// متغيرات النظام / System Variables
+// ========================================
+
+var array<float> pivotHighPrices = array.new_float(max_array_size, na)
+var array<int> pivotHighBars = array.new_int(max_array_size, na)
+var array<float> pivotLowPrices = array.new_float(max_array_size, na)
+var array<int> pivotLowBars = array.new_int(max_array_size, na)
+
+var line[] zigzagLines = array.new_line(500)
+var label[] patternLabels = array.new_label(500)
+var box[] przBoxes = array.new_box(100)
+
+// ========================================
+// دوال مساعدة / Helper Functions
+// ========================================
+
+// التحقق من النسبة مع الهامش / Check ratio with tolerance
+checkRatio(actual, target, tol = tolerance) =>
+    math.abs(actual - target) <= tol
+
+// التحقق من النسبة ضمن نطاق / Check ratio within range
+checkRatioRange(actual, min, max, tol = tolerance) =>
+    actual >= (min - tol) and actual <= (max + tol)
+
+// حساب نسبة فيبوناتشي / Calculate Fibonacci ratio
+fibRatio(pointA, pointB, pointC) =>
+    math.abs(pointC - pointB) / math.abs(pointB - pointA)
+
+// ========================================
+// خوارزمية الزقزاق / ZigZag Algorithm
+// ========================================
+
+// اكتشاف القمم والقيعان / Detect pivots
+pivotHigh = ta.pivothigh(high, zigzag1Length, zigzag1Length)
+pivotLow = ta.pivotlow(low, zigzag1Length, zigzag1Length)
+
+// تخزين القمم المؤكدة / Store confirmed highs
+if not na(pivotHigh) and barstate.isconfirmed
+    array.unshift(pivotHighPrices, pivotHigh)
+    array.unshift(pivotHighBars, bar_index - zigzag1Length)
+    if array.size(pivotHighPrices) > max_array_size
+        array.pop(pivotHighPrices)
+        array.pop(pivotHighBars)
+
+// تخزين القيعان المؤكدة / Store confirmed lows
+if not na(pivotLow) and barstate.isconfirmed
+    array.unshift(pivotLowPrices, pivotLow)
+    array.unshift(pivotLowBars, bar_index - zigzag1Length)
+    if array.size(pivotLowPrices) > max_array_size
+        array.pop(pivotLowPrices)
+        array.pop(pivotLowBars)
+
+// ========================================
+// رسم الزقزاق / Draw ZigZag
+// ========================================
+
+if barstate.islast and array.size(pivotHighPrices) > 0 and array.size(pivotLowPrices) > 0
+    // مسح الخطوط القديمة / Clear old lines
+    for i = 0 to array.size(zigzagLines) - 1
+        line.delete(array.get(zigzagLines, i))
+    array.clear(zigzagLines)
+    
+    // بناء نقاط الزقزاق / Build zigzag points
+    var array<float> allPrices = array.new_float(0)
+    var array<int> allBars = array.new_int(0)
+    var array<bool> allIsHigh = array.new_bool(0)
+    
+    // دمج القمم والقيعان / Merge highs and lows
+    for i = 0 to math.min(array.size(pivotHighPrices) - 1, 50)
+        if not na(array.get(pivotHighPrices, i))
+            array.push(allPrices, array.get(pivotHighPrices, i))
+            array.push(allBars, array.get(pivotHighBars, i))
+            array.push(allIsHigh, true)
+    
+    for i = 0 to math.min(array.size(pivotLowPrices) - 1, 50)
+        if not na(array.get(pivotLowPrices, i))
+            array.push(allPrices, array.get(pivotLowPrices, i))
+            array.push(allBars, array.get(pivotLowBars, i))
+            array.push(allIsHigh, false)
+    
+    // ترتيب حسب الوقت / Sort by time
+    if array.size(allBars) > 1
+        for i = 0 to array.size(allBars) - 2
+            for j = i + 1 to array.size(allBars) - 1
+                if array.get(allBars, i) < array.get(allBars, j)
+                    // تبديل / Swap
+                    tempPrice = array.get(allPrices, i)
+                    tempBar = array.get(allBars, i)
+                    tempIsHigh = array.get(allIsHigh, i)
+                    
+                    array.set(allPrices, i, array.get(allPrices, j))
+                    array.set(allBars, i, array.get(allBars, j))
+                    array.set(allIsHigh, i, array.get(allIsHigh, j))
+                    
+                    array.set(allPrices, j, tempPrice)
+                    array.set(allBars, j, tempBar)
+                    array.set(allIsHigh, j, tempIsHigh)
+    
+    // رسم خطوط الزقزاق / Draw zigzag lines
+    if array.size(allBars) > 1
+        for i = 0 to math.min(array.size(allBars) - 2, 20)
+            l = line.new(
+                 x1=array.get(allBars, i), 
+                 y1=array.get(allPrices, i),
+                 x2=array.get(allBars, i + 1), 
+                 y2=array.get(allPrices, i + 1),
+                 color=zigzag1Color,
+                 width=zigzag1Width,
+                 style=line.style_solid)
+            array.push(zigzagLines, l)
+
+// ========================================
+// كشف النماذج الهارمونية / Detect Harmonic Patterns
+// ========================================
+
+// دالة للتحقق من نموذج Gartley
+checkGartley(xPrice, aPrice, bPrice, cPrice, dPrice) =>
+    XA = math.abs(aPrice - xPrice)
+    AB = math.abs(bPrice - aPrice)
+    BC = math.abs(cPrice - bPrice)
+    CD = math.abs(dPrice - cPrice)
+    
+    XAB = AB / XA
+    ABC = BC / AB
+    XAD = math.abs(dPrice - xPrice) / XA
+    
+    isGartley = checkRatio(XAB, 0.618) and 
+                 checkRatioRange(ABC, 0.382, 0.886) and 
+                 checkRatio(XAD, 0.786)
+    
+    [isGartley, XAB, ABC, XAD]
+
+// دالة للتحقق من نموذج Bat
+checkBat(xPrice, aPrice, bPrice, cPrice, dPrice) =>
+    XA = math.abs(aPrice - xPrice)
+    AB = math.abs(bPrice - aPrice)
+    BC = math.abs(cPrice - bPrice)
+    
+    XAB = AB / XA
+    ABC = BC / AB
+    XAD = math.abs(dPrice - xPrice) / XA
+    
+    isBat = checkRatioRange(XAB, 0.382, 0.5) and 
+             checkRatioRange(ABC, 0.382, 0.886) and 
+             checkRatio(XAD, 0.886)
+    
+    [isBat, XAB, ABC, XAD]
+
+// دالة للتحقق من نموذج Butterfly
+checkButterfly(xPrice, aPrice, bPrice, cPrice, dPrice) =>
+    XA = math.abs(aPrice - xPrice)
+    AB = math.abs(bPrice - aPrice)
+    BC = math.abs(cPrice - bPrice)
+    
+    XAB = AB / XA
+    ABC = BC / AB
+    XAD = math.abs(dPrice - xPrice) / XA
+    
+    isButterfly = checkRatio(XAB, 0.786) and 
+                   checkRatioRange(ABC, 0.382, 0.886) and 
+                   checkRatioRange(XAD, 1.272, 1.618)
+    
+    [isButterfly, XAB, ABC, XAD]
+
+// دالة للتحقق من نموذج Crab
+checkCrab(xPrice, aPrice, bPrice, cPrice, dPrice) =>
+    XA = math.abs(aPrice - xPrice)
+    AB = math.abs(bPrice - aPrice)
+    BC = math.abs(cPrice - bPrice)
+    
+    XAB = AB / XA
+    ABC = BC / AB
+    XAD = math.abs(dPrice - xPrice) / XA
+    
+    isCrab = checkRatioRange(XAB, 0.382, 0.618) and 
+              checkRatioRange(ABC, 0.382, 0.886) and 
+              checkRatio(XAD, 1.618)
+    
+    [isCrab, XAB, ABC, XAD]
+
+// دالة للتحقق من نموذج Deep Crab
+checkDeepCrab(xPrice, aPrice, bPrice, cPrice, dPrice) =>
+    XA = math.abs(aPrice - xPrice)
+    AB = math.abs(bPrice - aPrice)
+    BC = math.abs(cPrice - bPrice)
+    
+    XAB = AB / XA
+    ABC = BC / AB
+    XAD = math.abs(dPrice - xPrice) / XA
+    
+    isDeepCrab = checkRatio(XAB, 0.886) and 
+                  checkRatioRange(ABC, 0.382, 0.886) and 
+                  checkRatio(XAD, 1.618)
+    
+    [isDeepCrab, XAB, ABC, XAD]
+
+// دالة للتحقق من نموذج Cypher
+checkCypher(xPrice, aPrice, bPrice, cPrice, dPrice) =>
+    XA = math.abs(aPrice - xPrice)
+    AB = math.abs(bPrice - aPrice)
+    BC = math.abs(cPrice - bPrice)
+    
+    XAB = AB / XA
+    ABC = BC / AB
+    XAD = math.abs(dPrice - xPrice) / XA
+    
+    isCypher = checkRatioRange(XAB, 0.382, 0.618) and 
+                checkRatioRange(ABC, 1.13, 1.414) and 
+                checkRatio(XAD, 0.786)
+    
+    [isCypher, XAB, ABC, XAD]
+
+// دالة للتحقق من نموذج Shark
+checkShark(xPrice, aPrice, bPrice, cPrice, dPrice) =>
+    AB = math.abs(bPrice - aPrice)
+    BC = math.abs(cPrice - bPrice)
+    CD = math.abs(dPrice - cPrice)
+    XA = math.abs(aPrice - xPrice)
+    
+    ABC_ratio = BC / AB
+    BCD = CD / BC
+    XAD = math.abs(dPrice - xPrice) / XA
+    
+    isShark = checkRatioRange(ABC_ratio, 1.13, 1.618) and 
+               checkRatioRange(BCD, 1.618, 2.24) and 
+               checkRatioRange(XAD, 0.886, 1.13)
+    
+    [isShark, ABC_ratio, BCD, XAD]
+
+// ========================================
+// فحص وعرض النماذج / Scan and Display Patterns
+// ========================================
+
+var string detectedPattern = ''
+var float harmonyScore = 0.0
+var box przBox = na
+
+if barstate.islast and array.size(pivotHighPrices) >= 3 and array.size(pivotLowPrices) >= 3
+    // مسح الملصقات القديمة / Clear old labels
+    for i = 0 to array.size(patternLabels) - 1
+        label.delete(array.get(patternLabels, i))
+    array.clear(patternLabels)
+    
+    // محاولة إيجاد نمط صعودي / Try to find bullish pattern
+    if array.size(pivotLowPrices) >= 3 and array.size(pivotHighPrices) >= 2
+        // X=Low, A=High, B=Low, C=High, D=Low
+        xPrice = array.get(pivotLowPrices, 4)
+        xBar = array.get(pivotLowBars, 4)
+        aPrice = array.get(pivotHighPrices, 3)
+        aBar = array.get(pivotHighBars, 3)
+        bPrice = array.get(pivotLowPrices, 2)
+        bBar = array.get(pivotLowBars, 2)
+        cPrice = array.get(pivotHighPrices, 1)
+        cBar = array.get(pivotHighBars, 1)
+        dPrice = array.get(pivotLowPrices, 0)
+        dBar = array.get(pivotLowBars, 0)
+        
+        if not na(xPrice) and not na(aPrice) and not na(bPrice) and not na(cPrice) and not na(dPrice)
+            // Check Gartley
+            [isGartley, xab_g, abc_g, xad_g] = checkGartley(xPrice, aPrice, bPrice, cPrice, dPrice)
+            if isGartley
+                detectedPattern := 'Gartley (Bullish)'
+                harmonyScore := (1 - math.abs(xab_g - 0.618) / 0.618 + 
+                                  1 - math.abs(xad_g - 0.786) / 0.786) / 2 * 100
+                
+                // رسم النمط / Draw pattern
+                l1 = line.new(xBar, xPrice, aBar, aPrice, color=bullishColor, width=1, style=line.style_solid)
+                l2 = line.new(aBar, aPrice, bBar, bPrice, color=bullishColor, width=1, style=line.style_solid)
+                l3 = line.new(bBar, bPrice, cBar, cPrice, color=bullishColor, width=1, style=line.style_solid)
+                l4 = line.new(cBar, cPrice, dBar, dPrice, color=bullishColor, width=1, style=line.style_solid)
+                
+                if showLabels
+                    lbl = label.new(dBar, dPrice, 'Gartley\nXAB:' + str.tostring(xab_g, '#.###') + 
+                                     '\nXAD:' + str.tostring(xad_g, '#.###'), 
+                                     style=label.style_label_up, color=bullishColor, 
+                                     textcolor=color.white, size=size.small)
+                    array.push(patternLabels, lbl)
+                
+                // رسم PRZ / Draw PRZ
+                if showPRZ
+                    przLow = dPrice * 0.99
+                    przHigh = dPrice * 1.01
+                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                                       border_color=bullishColor, bgcolor=przColor, 
+                                       border_width=1, border_style=line.style_dashed)
+            
+            // Check Bat
+            [isBat, xab_b, abc_b, xad_b] = checkBat(xPrice, aPrice, bPrice, cPrice, dPrice)
+            if isBat
+                detectedPattern := 'Bat (Bullish)'
+                harmonyScore := (1 - math.abs(xad_b - 0.886) / 0.886) * 100
+                
+                l1 = line.new(xBar, xPrice, aBar, aPrice, color=bullishColor, width=1)
+                l2 = line.new(aBar, aPrice, bBar, bPrice, color=bullishColor, width=1)
+                l3 = line.new(bBar, bPrice, cBar, cPrice, color=bullishColor, width=1)
+                l4 = line.new(cBar, cPrice, dBar, dPrice, color=bullishColor, width=1)
+                
+                if showLabels
+                    lbl = label.new(dBar, dPrice, 'Bat\nXAB:' + str.tostring(xab_b, '#.###') + 
+                                     '\nXAD:' + str.tostring(xad_b, '#.###'), 
+                                     style=label.style_label_up, color=bullishColor, 
+                                     textcolor=color.white, size=size.small)
+                    array.push(patternLabels, lbl)
+                
+                if showPRZ
+                    przLow = dPrice * 0.99
+                    przHigh = dPrice * 1.01
+                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                                       border_color=bullishColor, bgcolor=przColor, 
+                                       border_width=1, border_style=line.style_dashed)
+            
+            // Check Butterfly
+            [isButterfly, xab_bt, abc_bt, xad_bt] = checkButterfly(xPrice, aPrice, bPrice, cPrice, dPrice)
+            if isButterfly
+                detectedPattern := 'Butterfly (Bullish)'
+                harmonyScore := (1 - math.abs(xab_bt - 0.786) / 0.786) * 100
+                
+                l1 = line.new(xBar, xPrice, aBar, aPrice, color=bullishColor, width=1)
+                l2 = line.new(aBar, aPrice, bBar, bPrice, color=bullishColor, width=1)
+                l3 = line.new(bBar, bPrice, cBar, cPrice, color=bullishColor, width=1)
+                l4 = line.new(cBar, cPrice, dBar, dPrice, color=bullishColor, width=1)
+                
+                if showLabels
+                    lbl = label.new(dBar, dPrice, 'Butterfly\nXAB:' + str.tostring(xab_bt, '#.###') + 
+                                     '\nXAD:' + str.tostring(xad_bt, '#.###'), 
+                                     style=label.style_label_up, color=bullishColor, 
+                                     textcolor=color.white, size=size.small)
+                    array.push(patternLabels, lbl)
+                
+                if showPRZ
+                    przLow = dPrice * 0.985
+                    przHigh = dPrice * 1.015
+                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                                       border_color=bullishColor, bgcolor=przColor, 
+                                       border_width=1, border_style=line.style_dashed)
+            
+            // Check Crab
+            [isCrab, xab_c, abc_c, xad_c] = checkCrab(xPrice, aPrice, bPrice, cPrice, dPrice)
+            if isCrab
+                detectedPattern := 'Crab (Bullish)'
+                harmonyScore := (1 - math.abs(xad_c - 1.618) / 1.618) * 100
+                
+                l1 = line.new(xBar, xPrice, aBar, aPrice, color=bullishColor, width=1)
+                l2 = line.new(aBar, aPrice, bBar, bPrice, color=bullishColor, width=1)
+                l3 = line.new(bBar, bPrice, cBar, cPrice, color=bullishColor, width=1)
+                l4 = line.new(cBar, cPrice, dBar, dPrice, color=bullishColor, width=1)
+                
+                if showLabels
+                    lbl = label.new(dBar, dPrice, 'Crab\nXAB:' + str.tostring(xab_c, '#.###') + 
+                                     '\nXAD:' + str.tostring(xad_c, '#.###'), 
+                                     style=label.style_label_up, color=bullishColor, 
+                                     textcolor=color.white, size=size.small)
+                    array.push(patternLabels, lbl)
+                
+                if showPRZ
+                    przLow = dPrice * 0.98
+                    przHigh = dPrice * 1.02
+                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                                       border_color=bullishColor, bgcolor=przColor, 
+                                       border_width=1, border_style=line.style_dashed)
+            
+            // Check Deep Crab
+            [isDeepCrab, xab_dc, abc_dc, xad_dc] = checkDeepCrab(xPrice, aPrice, bPrice, cPrice, dPrice)
+            if isDeepCrab
+                detectedPattern := 'Deep Crab (Bullish)'
+                harmonyScore := (1 - math.abs(xab_dc - 0.886) / 0.886 + 
+                                  1 - math.abs(xad_dc - 1.618) / 1.618) / 2 * 100
+                
+                l1 = line.new(xBar, xPrice, aBar, aPrice, color=bullishColor, width=1)
+                l2 = line.new(aBar, aPrice, bBar, bPrice, color=bullishColor, width=1)
+                l3 = line.new(bBar, bPrice, cBar, cPrice, color=bullishColor, width=1)
+                l4 = line.new(cBar, cPrice, dBar, dPrice, color=bullishColor, width=1)
+                
+                if showLabels
+                    lbl = label.new(dBar, dPrice, 'Deep Crab\nXAB:' + str.tostring(xab_dc, '#.###') + 
+                                     '\nXAD:' + str.tostring(xad_dc, '#.###'), 
+                                     style=label.style_label_up, color=bullishColor, 
+                                     textcolor=color.white, size=size.small)
+                    array.push(patternLabels, lbl)
+                
+                if showPRZ
+                    przLow = dPrice * 0.98
+                    przHigh = dPrice * 1.02
+                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                                       border_color=bullishColor, bgcolor=przColor, 
+                                       border_width=1, border_style=line.style_dashed)
+            
+            // Check Cypher
+            [isCypher, xab_cy, abc_cy, xad_cy] = checkCypher(xPrice, aPrice, bPrice, cPrice, dPrice)
+            if isCypher
+                detectedPattern := 'Cypher (Bullish)'
+                harmonyScore := (1 - math.abs(xad_cy - 0.786) / 0.786) * 100
+                
+                l1 = line.new(xBar, xPrice, aBar, aPrice, color=bullishColor, width=1)
+                l2 = line.new(aBar, aPrice, bBar, bPrice, color=bullishColor, width=1)
+                l3 = line.new(bBar, bPrice, cBar, cPrice, color=bullishColor, width=1)
+                l4 = line.new(cBar, cPrice, dBar, dPrice, color=bullishColor, width=1)
+                
+                if showLabels
+                    lbl = label.new(dBar, dPrice, 'Cypher\nXAB:' + str.tostring(xab_cy, '#.###') + 
+                                     '\nXAD:' + str.tostring(xad_cy, '#.###'), 
+                                     style=label.style_label_up, color=bullishColor, 
+                                     textcolor=color.white, size=size.small)
+                    array.push(patternLabels, lbl)
+                
+                if showPRZ
+                    przLow = dPrice * 0.99
+                    przHigh = dPrice * 1.01
+                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                                       border_color=bullishColor, bgcolor=przColor, 
+                                       border_width=1, border_style=line.style_dashed)
+
+// ========================================
+// لوحة المعلومات / Information Table
+// ========================================
+
+var table infoTable = table.new(position.top_right, 2, 3, 
+                                  border_width=1, 
+                                  border_color=color.gray,
+                                  bgcolor=color.new(color.black, 85))
+
+if barstate.islast
+    table.cell(infoTable, 0, 0, 'Pattern:', text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 0, detectedPattern != '' ? detectedPattern : 'None', 
+                text_color=color.white, text_size=size.small)
+    
+    table.cell(infoTable, 0, 1, 'Harmony Score:', text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 1, str.tostring(harmonyScore, '#.##') + '%', 
+                text_color=harmonyScore > 80 ? color.green : harmonyScore > 60 ? color.yellow : color.red, 
+                text_size=size.small)
+    
+    table.cell(infoTable, 0, 2, 'Mode:', text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 2, strictMode ? 'Strict (±3%)' : 'Normal (±5%)', 
+                text_color=color.white, text_size=size.small)
+
+// ========================================
+// التنبيهات / Alerts
+// ========================================
+
+// تنبيه عند اكتمال النمط / Alert on pattern completion
+alertcondition(detectedPattern != '', title='Harmonic Pattern Detected', 
+                message='Harmonic Pattern Detected: {{ticker}} - ' + detectedPattern)
+
+// تنبيه عند دخول PRZ / Alert on PRZ entry
+inPRZ = not na(przBox) and close >= box.get_bottom(przBox) and close <= box.get_top(przBox)
+alertcondition(inPRZ, title='Price in PRZ', 
+                message='Price entered Potential Reversal Zone: {{ticker}}')
+
+// ========================================
+// رسم إضافي للتأكد من عمل المؤشر / Additional plot to ensure indicator works
+// ========================================
+
+// Plot a simple marker to satisfy Pine Script requirement for at least one plot
+plot(na, title='Harmonic Radar Active', display=display.none)
+

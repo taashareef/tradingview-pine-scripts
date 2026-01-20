@@ -47,7 +47,6 @@ var array<int> pivotLowBars = array.new_int(max_array_size, na)
 
 var line[] zigzagLines = array.new_line(500)
 var label[] patternLabels = array.new_label(500)
-var box[] przBoxes = array.new_box(100)
 
 // ========================================
 // دوال مساعدة / Helper Functions
@@ -60,10 +59,6 @@ checkRatio(actual, target, tol = tolerance) =>
 // التحقق من النسبة ضمن نطاق / Check ratio within range
 checkRatioRange(actual, min, max, tol = tolerance) =>
     actual >= (min - tol) and actual <= (max + tol)
-
-// حساب نسبة فيبوناتشي / Calculate Fibonacci ratio
-fibRatio(pointA, pointB, pointC) =>
-    math.abs(pointC - pointB) / math.abs(pointB - pointA)
 
 // ========================================
 // خوارزمية الزقزاق / ZigZag Algorithm
@@ -130,8 +125,8 @@ if barstate.islast and array.size(pivotHighPrices) > 0 and array.size(pivotLowPr
             keyIsHigh = array.get(allIsHigh, i)
             j = i - 1
             
-            // Shift elements that are greater than key to the right (descending order)
-            while j >= 0 and array.get(allBars, j) > keyBar
+            // Shift elements with smaller bar indices to the right (descending order by bar index)
+            while j >= 0 and array.get(allBars, j) < keyBar
                 array.set(allPrices, j + 1, array.get(allPrices, j))
                 array.set(allBars, j + 1, array.get(allBars, j))
                 array.set(allIsHigh, j + 1, array.get(allIsHigh, j))
@@ -261,7 +256,6 @@ checkShark(xPrice, aPrice, bPrice, cPrice, dPrice) =>
     XA = math.abs(aPrice - xPrice)
     AB = math.abs(bPrice - aPrice)
     BC = math.abs(cPrice - bPrice)
-    CD = math.abs(dPrice - cPrice)
     
     XAB = AB / XA
     ABC = BC / AB

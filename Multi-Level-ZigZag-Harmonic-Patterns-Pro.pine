@@ -1,0 +1,762 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Professional Harmonic Indicator - Multi Level ZigZag
+
+//@version=5
+indicator('Multi Level ZigZag Harmonic Patterns Pro', shorttitle='ML-ZZ-HP Pro', overlay=true, max_bars_back=1000, max_lines_count=500, max_labels_count=500, max_boxes_count=100)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ║                           INPUT SETTINGS                                    ║
+// ══════════════════════════════════════════════════════════════════════════════
+
+// General Settings
+grpGeneral = "═══ General Settings ═══"
+max_array_size = input.int(200, "Max Array Size", step=20, group=grpGeneral)
+waitForConfirmation = input.bool(true, "Wait For Bar Confirmation (Non-Repainting)", group=grpGeneral, tooltip="When enabled, signals only appear after bar closes - prevents repainting")
+
+// ZigZag Level 1 Settings
+grpZZ1 = "═══ ZigZag Level 1 ═══"
+showZigZag1 = input.bool(true, "Show ZigZag Level 1", group=grpZZ1)
+zigzag1Length = input.int(10, "Length", step=5, minval=3, group=grpZZ1)
+zigzag1Color = input.color(color.new(#B8860B, 30), "Color", group=grpZZ1, tooltip="Muted Gold")
+
+// ZigZag Level 2 Settings
+grpZZ2 = "═══ ZigZag Level 2 ═══"
+showZigZag2 = input.bool(true, "Show ZigZag Level 2", group=grpZZ2)
+zigzag2Length = input.int(2, "Length", step=1, minval=2, group=grpZZ2)
+zigzag2Color = input.color(color.new(#708090, 30), "Color", group=grpZZ2, tooltip="Slate Gray")
+
+// ZigZag Level 3 Settings
+grpZZ3 = "═══ ZigZag Level 3 ═══"
+showZigZag3 = input.bool(true, "Show ZigZag Level 3", group=grpZZ3)
+zigzag3Length = input.int(3, "Length", step=1, minval=2, group=grpZZ3)
+zigzag3Color = input.color(color.new(#20B2AA, 30), "Color", group=grpZZ3, tooltip="Light Sea Green")
+
+// ZigZag Level 4 Settings
+grpZZ4 = "═══ ZigZag Level 4 ═══"
+showZigZag4 = input.bool(true, "Show ZigZag Level 4", group=grpZZ4)
+zigzag4Length = input.int(4, "Length", step=1, minval=2, group=grpZZ4)
+zigzag4Color = input.color(color.new(#C0C0C0, 30), "Color", group=grpZZ4, tooltip="Silver")
+
+useZigZagChain = input.bool(false, "Use ZigZag Chain Mode", group=grpGeneral)
+
+// Harmonic Pattern Settings
+grpPatterns = "═══ Harmonic Patterns ═══"
+gartley = input.bool(true, "Gartley", group=grpPatterns)
+bat = input.bool(true, "Bat", group=grpPatterns)
+butterfly = input.bool(true, "Butterfly", group=grpPatterns)
+crab = input.bool(true, "Crab", group=grpPatterns)
+deepCrab = input.bool(true, "Deep Crab", group=grpPatterns)
+shark = input.bool(true, "Shark", group=grpPatterns)
+cypher = input.bool(true, "Cypher", group=grpPatterns)
+threeDrives = input.bool(true, "3 Drives", group=grpPatterns)
+fiveZero = input.bool(true, "5-0", group=grpPatterns)
+
+// ABCD Pattern Settings
+grpABCD = "═══ ABCD Patterns ═══"
+abcdClassic = input.bool(true, "ABCD Classic", group=grpABCD)
+abEQcd = input.bool(true, "AB=CD", group=grpABCD)
+abcdExt = input.bool(true, "ABCD Extension", group=grpABCD)
+doubleBottomTop = input.bool(true, "Double Top/Bottom", group=grpABCD)
+
+// Scott Carney Strict Mode
+grpStrict = "═══ Strict Mode (Scott Carney) ═══"
+strictMode = input.bool(true, "Enable Strict Mode", group=grpStrict, tooltip="When enabled, enforces strict Scott Carney ratios with ±3% tolerance especially for Point B")
+strictErrorPercent = input.int(3, "Strict Mode Error %", minval=1, maxval=5, step=1, group=grpStrict)
+normalErrorPercent = input.int(10, "Normal Mode Error %", minval=5, maxval=20, step=5, group=grpStrict)
+MaxRiskPerReward = input.int(30, "Max Risk/Reward % (Double Top/Bottom)", step=10, minval=0, group=grpStrict)
+
+// PRZ Settings
+grpPRZ = "═══ PRZ Zone Settings ═══"
+showPRZ = input.bool(true, "Show PRZ Zone", group=grpPRZ)
+przTransparency = input.int(85, "PRZ Transparency", minval=70, maxval=95, step=5, group=grpPRZ)
+przExtendBars = input.int(10, "PRZ Extend Bars", minval=5, maxval=50, step=5, group=grpPRZ)
+
+// Visual Settings
+grpVisual = "═══ Visual Settings ═══"
+showRatioLabels = input.bool(true, "Show Ratio Labels", group=grpVisual)
+showInfoPanel = input.bool(true, "Show Info Panel", group=grpVisual)
+infoPanelPosition = input.string("Top Right", "Panel Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpVisual)
+fillTransparency = input.int(88, "Pattern Fill Transparency", minval=80, maxval=95, step=2, group=grpVisual)
+
+// Color Settings
+grpColors = "═══ Color Settings ═══"
+bullishColor = input.color(color.new(#008B45, 0), "Bullish Color", group=grpColors, tooltip="Professional Green")
+bearishColor = input.color(color.new(#CD5C5C, 0), "Bearish Color", group=grpColors, tooltip="Indian Red")
+przBullColor = input.color(color.new(#228B22, 85), "PRZ Bullish", group=grpColors)
+przBearColor = input.color(color.new(#B22222, 85), "PRZ Bearish", group=grpColors)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ║                           CALCULATIONS                                      ║
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Error Margins
+errorPercent = strictMode ? strictErrorPercent : normalErrorPercent
+err_min = (100.0 - errorPercent) / 100.0
+err_max = (100.0 + errorPercent) / 100.0
+
+// ZigZag Line Styles (Thin and Dashed for Professional Look)
+zigzagWidth = 1
+zigzagStyle = line.style_dashed
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ║                       ZIGZAG DATA ARRAYS                                    ║
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Level 1 Arrays
+var zigzagpivots1 = array.new_float(0)
+var zigzagpivotbars1 = array.new_int(0)
+var zigzagpivotdirs1 = array.new_int(0)
+var zigzaglines1 = array.new_line(0)
+
+// Level 2 Arrays
+var zigzagpivots2 = array.new_float(0)
+var zigzagpivotbars2 = array.new_int(0)
+var zigzagpivotdirs2 = array.new_int(0)
+var zigzaglines2 = array.new_line(0)
+
+// Level 3 Arrays
+var zigzagpivots3 = array.new_float(0)
+var zigzagpivotbars3 = array.new_int(0)
+var zigzagpivotdirs3 = array.new_int(0)
+var zigzaglines3 = array.new_line(0)
+
+// Level 4 Arrays
+var zigzagpivots4 = array.new_float(0)
+var zigzagpivotbars4 = array.new_int(0)
+var zigzagpivotdirs4 = array.new_int(0)
+var zigzaglines4 = array.new_line(0)
+
+// Pattern Drawing Arrays for each level
+var wmlines1 = array.new_line(8)
+var wmtype1 = array.new_int(2, 1)
+var wmLabels1 = array.new_bool(13, false)
+var wmLabel1 = array.new_label(1)
+var przBox1 = array.new_box(1)
+var fillLines1 = array.new_line(0)
+
+var wmlines2 = array.new_line(8)
+var wmtype2 = array.new_int(2, 1)
+var wmLabels2 = array.new_bool(13, false)
+var wmLabel2 = array.new_label(1)
+var przBox2 = array.new_box(1)
+var fillLines2 = array.new_line(0)
+
+var wmlines3 = array.new_line(8)
+var wmtype3 = array.new_int(2, 1)
+var wmLabels3 = array.new_bool(13, false)
+var wmLabel3 = array.new_label(1)
+var przBox3 = array.new_box(1)
+var fillLines3 = array.new_line(0)
+
+var wmlines4 = array.new_line(8)
+var wmtype4 = array.new_int(2, 1)
+var wmLabels4 = array.new_bool(13, false)
+var wmLabel4 = array.new_label(1)
+var przBox4 = array.new_box(1)
+var fillLines4 = array.new_line(0)
+
+// Ratio Labels Arrays
+var ratioLabels1 = array.new_label(0)
+var ratioLabels2 = array.new_label(0)
+var ratioLabels3 = array.new_label(0)
+var ratioLabels4 = array.new_label(0)
+
+// Pattern State Tracking
+var float lastHarmonyScore = 0.0
+var string lastPatternName = ""
+var int lastPatternDir = 0
+var bool priceInPRZ = false
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ║                       ZIGZAG CORE FUNCTIONS                                 ║
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Pivot Detection Function (Non-Repainting with barstate.isconfirmed)
+pivots(length) =>
+    // Only process when bar is confirmed to prevent repainting
+    confirmedBar = waitForConfirmation ? barstate.isconfirmed : true
+    
+    float phigh = na
+    float plow = na
+    
+    if confirmedBar
+        phigh := ta.highestbars(high, length) == 0 ? high : na
+        plow := ta.lowestbars(low, length) == 0 ? low : na
+    
+    dir = 0
+    iff_1 = plow and na(phigh) ? -1 : nz(dir[1])
+    dir := phigh and na(plow) ? 1 : iff_1
+    [dir, phigh, plow, bar_index, bar_index]
+
+// Outer Pivots Function for Higher Level ZigZags
+outerpivots(length, zigzagpivots, zigzagpivotbars) =>
+    float phigh = na
+    float plow = na
+    int phighbar = na
+    int plowbar = na
+    int zdir = 0
+    
+    if array.size(zigzagpivots) >= length
+        zigzagminimal = array.slice(zigzagpivots, 0, length - 1)
+        lastPivot = array.get(zigzagpivots, 0)
+        lastPivotBar = array.get(zigzagpivotbars, 0)
+        highestPivot = array.max(zigzagminimal)
+        lowestPivot = array.min(zigzagminimal)
+        phigh := lastPivot == highestPivot ? lastPivot : na
+        plow := lastPivot == lowestPivot ? lastPivot : na
+        phighbar := lastPivot == highestPivot ? lastPivotBar : na
+        plowbar := lastPivot == lowestPivot ? lastPivotBar : na
+        iff_1 = plow and na(phigh) ? -1 : nz(zdir[1])
+        zdir := phigh and na(plow) ? 1 : iff_1
+    
+    [zdir, phigh, plow, phighbar, plowbar]
+
+// Core ZigZag Processing Function
+zigzagcore(dir, phigh, plow, phighbar, plowbar, zigzagpivots, zigzagpivotbars, zigzagpivotdirs) =>
+    dirchanged = ta.change(dir)
+    newZG = false
+    
+    if phigh or plow
+        value = dir == 1 ? phigh : plow
+        bar = phigh ? phighbar : plowbar
+        newDir = dir
+        
+        if not dirchanged and array.size(zigzagpivots) >= 1
+            pivot = array.shift(zigzagpivots)
+            pivotbar = array.shift(zigzagpivotbars)
+            pivotdir = array.shift(zigzagpivotdirs)
+            useNewValues = value * pivotdir < pivot * pivotdir
+            value := useNewValues ? pivot : value
+            bar := useNewValues ? pivotbar : bar
+        
+        if array.size(zigzagpivots) >= 2
+            LastPoint = array.get(zigzagpivots, 1)
+            newDir := dir * value > dir * LastPoint ? dir * 2 : dir
+        
+        array.unshift(zigzagpivots, value)
+        array.unshift(zigzagpivotbars, bar)
+        array.unshift(zigzagpivotdirs, newDir)
+        newZG := true
+        
+        if array.size(zigzagpivots) > max_array_size
+            array.pop(zigzagpivots)
+            array.pop(zigzagpivotbars)
+            array.pop(zigzagpivotdirs)
+    
+    newZG
+
+// Primary ZigZag Function
+zigzag(length, zigzagpivots, zigzagpivotbars, zigzagpivotdirs) =>
+    [dir, phigh, plow, phighbar, plowbar] = pivots(length)
+    zigzagcore(dir, phigh, plow, phighbar, plowbar, zigzagpivots, zigzagpivotbars, zigzagpivotdirs)
+
+// Outer ZigZag Function for Higher Levels
+outerzigzag(outerzigzagLength, zigzagpivots, zigzagpivotbars, outerzigzagpivots, outerzigzagpivotbars, outerzigzagpivotdirs) =>
+    newOuterZG = false
+    if array.size(zigzagpivots) >= outerzigzagLength * 2
+        [zdir, phigh, plow, phighbar, plowbar] = outerpivots(outerzigzagLength * 2, zigzagpivots, zigzagpivotbars)
+        newOuterZG := zigzagcore(zdir, phigh, plow, phighbar, plowbar, outerzigzagpivots, outerzigzagpivotbars, outerzigzagpivotdirs)
+    newOuterZG
+
+// Draw ZigZag Lines Function
+draw_zigzag(zigzaglines, zigzagpivots, zigzagpivotbars, zigzagcolor, showZigZag) =>
+    if array.size(zigzagpivots) >= 2 and showZigZag
+        y1 = array.get(zigzagpivots, 0)
+        y2 = array.get(zigzagpivots, 1)
+        x1 = array.get(zigzagpivotbars, 0)
+        x2 = array.get(zigzagpivotbars, 1)
+        
+        zline = line.new(x1=x1, y1=y1, x2=x2, y2=y2, xloc=xloc.bar_index, color=zigzagcolor, width=zigzagWidth, style=zigzagStyle)
+        
+        if array.size(zigzaglines) >= 1
+            lastLine = array.get(zigzaglines, 0)
+            if x2 == line.get_x2(lastLine) and y2 == line.get_y2(lastLine)
+                line.delete(lastLine)
+        
+        array.unshift(zigzaglines, zline)
+        
+        // Limit stored lines
+        if array.size(zigzaglines) > 100
+            oldLine = array.pop(zigzaglines)
+            line.delete(oldLine)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ║                    HARMONIC PATTERN FUNCTIONS                              ║
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Calculate Harmony Score (how well ratios match ideal values)
+calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, patternType) =>
+    float score = 0.0
+    float idealXAB = 0.0
+    float idealABC = 0.0
+    float idealBCD = 0.0
+    float idealXAD = 0.0
+    
+    if patternType == "Gartley"
+        idealXAB := 0.618
+        idealABC := 0.618
+        idealBCD := 1.272
+        idealXAD := 0.786
+    else if patternType == "Bat"
+        idealXAB := 0.440
+        idealABC := 0.618
+        idealBCD := 2.0
+        idealXAD := 0.886
+    else if patternType == "Butterfly"
+        idealXAB := 0.786
+        idealABC := 0.618
+        idealBCD := 2.0
+        idealXAD := 1.27
+    else if patternType == "Crab"
+        idealXAB := 0.500
+        idealABC := 0.618
+        idealBCD := 3.14
+        idealXAD := 1.618
+    else if patternType == "DeepCrab"
+        idealXAB := 0.886
+        idealABC := 0.618
+        idealBCD := 2.618
+        idealXAD := 1.618
+    else if patternType == "Shark"
+        idealXAB := 0.500
+        idealABC := 1.300
+        idealBCD := 1.800
+        idealXAD := 1.000
+    else if patternType == "Cypher"
+        idealXAB := 0.500
+        idealABC := 1.270
+        idealBCD := 1.618
+        idealXAD := 0.786
+    
+    if idealXAB > 0
+        xabDev = math.abs(xabRatio - idealXAB) / idealXAB
+        abcDev = math.abs(abcRatio - idealABC) / idealABC
+        bcdDev = math.abs(bcdRatio - idealBCD) / idealBCD
+        xadDev = math.abs(xadRatio - idealXAD) / idealXAD
+        
+        avgDev = (xabDev + abcDev + bcdDev + xadDev) / 4.0
+        score := math.max(0, math.min(100, (1.0 - avgDev) * 100))
+    
+    score
+
+// Generate Harmonic Pattern Label Text
+get_harmonic_label(wmLabels, dir, price, bar) =>
+    isGartley = array.get(wmLabels, 0)
+    isCrab = array.get(wmLabels, 1)
+    isDeepCrab = array.get(wmLabels, 2)
+    isBat = array.get(wmLabels, 3)
+    isButterfly = array.get(wmLabels, 4)
+    isShark = array.get(wmLabels, 5)
+    isCypher = array.get(wmLabels, 6)
+    is3Drives = array.get(wmLabels, 7)
+    isFiveZero = array.get(wmLabels, 8)
+    isAbcd = array.get(wmLabels, 9)
+    isAbEqCd = array.get(wmLabels, 10)
+    isAbcdExt = array.get(wmLabels, 11)
+    isDoubleTop = array.get(wmLabels, 12) and dir < 0
+    isDoubleBottom = array.get(wmLabels, 12) and dir > 0
+    
+    labelText = isGartley ? "Gartley" : ""
+    labelText := labelText + (isCrab ? (labelText == "" ? "" : "\n") + "Crab" : "")
+    labelText := labelText + (isDeepCrab ? (labelText == "" ? "" : "\n") + "Deep Crab" : "")
+    labelText := labelText + (isBat ? (labelText == "" ? "" : "\n") + "Bat" : "")
+    labelText := labelText + (isButterfly ? (labelText == "" ? "" : "\n") + "Butterfly" : "")
+    labelText := labelText + (isShark ? (labelText == "" ? "" : "\n") + "Shark" : "")
+    labelText := labelText + (isCypher ? (labelText == "" ? "" : "\n") + "Cypher" : "")
+    labelText := labelText + (is3Drives ? (labelText == "" ? "" : "\n") + "3 Drive" : "")
+    labelText := labelText + (isFiveZero ? (labelText == "" ? "" : "\n") + "5-0" : "")
+    labelText := labelText + (isAbcd ? (labelText == "" ? "" : "\n") + "ABCD" : "")
+    labelText := labelText + (isAbEqCd ? (labelText == "" ? "" : "\n") + "AB=CD" : "")
+    labelText := labelText + (isAbcdExt ? (labelText == "" ? "" : "\n") + "ABCD Ext" : "")
+    labelText := labelText + (isDoubleTop ? (labelText == "" ? "" : "\n") + "Double Top" : "")
+    labelText := labelText + (isDoubleBottom ? (labelText == "" ? "" : "\n") + "Double Bottom" : "")
+    
+    trendColor = dir > 0 ? bullishColor : bearishColor
+    lblStyle = dir < 1 ? label.style_label_down : label.style_label_up
+    
+    baseLabel = label.new(x=bar, y=price, text=labelText, xloc=xloc.bar_index, yloc=yloc.price, color=trendColor, style=lblStyle, textcolor=color.white, size=size.small)
+    baseLabel
+
+// Draw PRZ Zone Function
+drawPRZ(dPrice, cPrice, xPrice, aPrice, dir, dBar, przBox, przClr) =>
+    if showPRZ
+        // Calculate PRZ zone based on convergence of XA retracement, BC extension, and AB=CD
+        przHigh = dir > 0 ? math.min(dPrice, cPrice) : math.max(dPrice, aPrice)
+        przLow = dir > 0 ? math.max(dPrice - math.abs(cPrice - dPrice) * 0.5, xPrice) : math.min(dPrice + math.abs(cPrice - dPrice) * 0.5, xPrice)
+        
+        if dir < 0
+            temp = przHigh
+            przHigh := przLow
+            przLow := temp
+        
+        // Delete old PRZ box
+        if array.size(przBox) > 0
+            oldBox = array.get(przBox, 0)
+            if not na(oldBox)
+                box.delete(oldBox)
+        
+        // Create new PRZ box
+        newBox = box.new(left=dBar, top=przHigh, right=dBar + przExtendBars, bottom=przLow, xloc=xloc.bar_index, bgcolor=przClr, border_color=color.new(przClr, 50), border_width=1, border_style=line.style_dashed)
+        array.set(przBox, 0, newBox)
+        
+        [przHigh, przLow]
+    else
+        [na, na]
+
+// Draw Ratio Labels Function
+drawRatioLabels(x, xBar, a, aBar, b, bBar, c, cBar, d, dBar, xabRatio, abcRatio, bcdRatio, xadRatio, ratioLabelsArr, zigzagColor) =>
+    if showRatioLabels
+        // Clear old ratio labels
+        for i = 0 to array.size(ratioLabelsArr) - 1
+            lbl = array.get(ratioLabelsArr, i)
+            label.delete(lbl)
+        array.clear(ratioLabelsArr)
+        
+        // XAB Ratio Label (at point B)
+        xabLbl = label.new(x=bBar, y=b, text=str.tostring(xabRatio, "#.###"), xloc=xloc.bar_index, style=label.style_none, textcolor=zigzagColor, size=size.tiny)
+        array.push(ratioLabelsArr, xabLbl)
+        
+        // ABC Ratio Label (at point C)
+        abcLbl = label.new(x=cBar, y=c, text=str.tostring(abcRatio, "#.###"), xloc=xloc.bar_index, style=label.style_none, textcolor=zigzagColor, size=size.tiny)
+        array.push(ratioLabelsArr, abcLbl)
+        
+        // BCD Ratio Label (at point D)
+        bcdLbl = label.new(x=dBar, y=d, text=str.tostring(bcdRatio, "#.###"), xloc=xloc.bar_index, style=label.style_none, textcolor=zigzagColor, size=size.tiny)
+        array.push(ratioLabelsArr, bcdLbl)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ║                MAIN PATTERN DETECTION FUNCTION                             ║
+// ══════════════════════════════════════════════════════════════════════════════
+
+detect_harmonic_pattern(zigzagpivots, zigzagpivotbars, zigzagpivotdirs, wmlines, wmlabel, wmtype, wmLabels, przBox, ratioLabelsArr, zigzagColor, showZigZag) =>
+    start = waitForConfirmation ? 1 : 0
+    wm_pattern = false
+    abcd_pattern = false
+    double_pattern = false
+    float harmonyScore = 0.0
+    string patternName = ""
+    
+    if array.size(zigzagpivots) >= 6 + start and showZigZag
+        d = array.get(zigzagpivots, start + 0)
+        dBar = array.get(zigzagpivotbars, start + 0)
+        dDir = array.get(zigzagpivotdirs, start + 0)
+        
+        c = array.get(zigzagpivots, start + 1)
+        cBar = array.get(zigzagpivotbars, start + 1)
+        cDir = array.get(zigzagpivotdirs, start + 1)
+        
+        b = array.get(zigzagpivots, start + 2)
+        bBar = array.get(zigzagpivotbars, start + 2)
+        bDir = array.get(zigzagpivotdirs, start + 2)
+        
+        a = array.get(zigzagpivots, start + 3)
+        aBar = array.get(zigzagpivotbars, start + 3)
+        aDir = array.get(zigzagpivotdirs, start + 3)
+        
+        x = array.get(zigzagpivots, start + 4)
+        xBar = array.get(zigzagpivotbars, start + 4)
+        xDir = array.get(zigzagpivotdirs, start + 4)
+        
+        y = array.get(zigzagpivots, start + 5)
+        yBar = array.get(zigzagpivotbars, start + 5)
+        yDir = array.get(zigzagpivotdirs, start + 5)
+        
+        highPoint = math.max(x, a, b, c, d)
+        lowPoint = math.min(x, a, b, c, d)
+        dir = c > d ? 1 : -1
+        
+        // Calculate Fibonacci Ratios
+        xabRatio = math.abs(b - a) / math.abs(x - a)
+        abcRatio = math.abs(c - b) / math.abs(a - b)
+        bcdRatio = math.abs(d - c) / math.abs(b - c)
+        xadRatio = math.abs(d - a) / math.abs(x - a)
+        yxaRatio = math.abs(a - x) / math.abs(y - x)
+        
+        abTime = math.abs(aBar - bBar)
+        cdTime = math.abs(cBar - dBar)
+        abPrice = math.abs(a - b)
+        cdPrice = math.abs(c - d)
+        
+        time_ratio = cdTime / abTime
+        price_ratio = cdPrice / abPrice
+        abcdDirection = a < b and a < c and c < b and c < d and a < d and b < d ? 1 : a > b and a > c and c > b and c > d and a > d and b > d ? -1 : 0
+        
+        risk = math.abs(b - d)
+        reward = math.abs(c - d)
+        riskPerReward = risk * 100 / (risk + reward)
+        
+        // Reset all pattern flags
+        for i = 0 to 12
+            array.set(wmLabels, i, false)
+        
+        if b < highPoint and b > lowPoint
+            // Gartley Pattern (Scott Carney)
+            if gartley and xabRatio >= 0.618 * err_min and xabRatio <= 0.618 * err_max and abcRatio >= 0.382 * err_min and abcRatio <= 0.886 * err_max and (bcdRatio >= 1.272 * err_min and bcdRatio <= 1.618 * err_max or xadRatio >= 0.786 * err_min and xadRatio <= 0.786 * err_max)
+                wm_pattern := true
+                array.set(wmLabels, 0, true)
+                harmonyScore := calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, "Gartley")
+                patternName := "Gartley"
+            
+            // Crab Pattern
+            if crab and xabRatio >= 0.382 * err_min and xabRatio <= 0.618 * err_max and abcRatio >= 0.382 * err_min and abcRatio <= 0.886 * err_max and (bcdRatio >= 2.24 * err_min and bcdRatio <= 3.618 * err_max or xadRatio >= 1.618 * err_min and xadRatio <= 1.618 * err_max)
+                wm_pattern := true
+                array.set(wmLabels, 1, true)
+                newScore = calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, "Crab")
+                if newScore > harmonyScore
+                    harmonyScore := newScore
+                    patternName := "Crab"
+            
+            // Deep Crab Pattern
+            if deepCrab and xabRatio >= 0.886 * err_min and xabRatio <= 0.886 * err_max and abcRatio >= 0.382 * err_min and abcRatio <= 0.886 * err_max and (bcdRatio >= 2.00 * err_min and bcdRatio <= 3.618 * err_max or xadRatio >= 1.618 * err_min and xadRatio <= 1.618 * err_max)
+                wm_pattern := true
+                array.set(wmLabels, 2, true)
+                newScore = calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, "DeepCrab")
+                if newScore > harmonyScore
+                    harmonyScore := newScore
+                    patternName := "Deep Crab"
+            
+            // Bat Pattern
+            if bat and xabRatio >= 0.382 * err_min and xabRatio <= 0.50 * err_max and abcRatio >= 0.382 * err_min and abcRatio <= 0.886 * err_max and (bcdRatio >= 1.618 * err_min and bcdRatio <= 2.618 * err_max or xadRatio >= 0.886 * err_min and xadRatio <= 0.886 * err_max)
+                wm_pattern := true
+                array.set(wmLabels, 3, true)
+                newScore = calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, "Bat")
+                if newScore > harmonyScore
+                    harmonyScore := newScore
+                    patternName := "Bat"
+            
+            // Butterfly Pattern
+            if butterfly and xabRatio >= 0.786 * err_min and xabRatio <= 0.786 * err_max and abcRatio >= 0.382 * err_min and abcRatio <= 0.886 * err_max and (bcdRatio >= 1.618 * err_min and bcdRatio <= 2.618 * err_max or xadRatio >= 1.272 * err_min and xadRatio <= 1.618 * err_max)
+                wm_pattern := true
+                array.set(wmLabels, 4, true)
+                newScore = calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, "Butterfly")
+                if newScore > harmonyScore
+                    harmonyScore := newScore
+                    patternName := "Butterfly"
+            
+            // Shark Pattern
+            if shark and abcRatio >= 1.13 * err_min and abcRatio <= 1.618 * err_max and bcdRatio >= 1.618 * err_min and bcdRatio <= 2.24 * err_max and xadRatio >= 0.886 * err_min and xadRatio <= 1.13 * err_max
+                wm_pattern := true
+                array.set(wmLabels, 5, true)
+                newScore = calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, "Shark")
+                if newScore > harmonyScore
+                    harmonyScore := newScore
+                    patternName := "Shark"
+            
+            // Cypher Pattern
+            if cypher and xabRatio >= 0.382 * err_min and xabRatio <= 0.618 * err_max and abcRatio >= 1.13 * err_min and abcRatio <= 1.414 * err_max and (bcdRatio >= 1.272 * err_min and bcdRatio <= 2.00 * err_max or xadRatio >= 0.786 * err_min and xadRatio <= 0.786 * err_max)
+                wm_pattern := true
+                array.set(wmLabels, 6, true)
+                newScore = calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, "Cypher")
+                if newScore > harmonyScore
+                    harmonyScore := newScore
+                    patternName := "Cypher"
+        
+        // 3 Drives Pattern
+        if threeDrives and yxaRatio >= 0.618 * err_min and yxaRatio <= 0.618 * err_max and xabRatio >= 1.27 * err_min and xabRatio <= 1.618 * err_max and abcRatio >= 0.618 * err_min and abcRatio <= 0.618 * err_max and bcdRatio >= 1.27 * err_min and bcdRatio <= 1.618 * err_max
+            wm_pattern := true
+            array.set(wmLabels, 7, true)
+            patternName := "3 Drives"
+        
+        // 5-0 Pattern
+        if fiveZero and xabRatio >= 1.13 * err_min and xabRatio <= 1.618 * err_max and abcRatio >= 1.618 * err_min and abcRatio <= 2.24 * err_max and bcdRatio >= 0.5 * err_min and bcdRatio <= 0.5 * err_max
+            wm_pattern := true
+            array.set(wmLabels, 8, true)
+            patternName := "5-0"
+        
+        // ABCD Classic
+        if abcdClassic and abcRatio >= 0.618 * err_min and abcRatio <= 0.786 * err_max and bcdRatio >= 1.272 * err_min and bcdRatio <= 1.618 * err_max and abcdDirection != 0
+            abcd_pattern := true
+            array.set(wmLabels, 9, true)
+            patternName := "ABCD"
+        
+        // AB=CD
+        if abEQcd and time_ratio >= err_min and time_ratio <= err_max and price_ratio >= err_min and price_ratio <= err_max and abcdDirection != 0
+            abcd_pattern := true
+            array.set(wmLabels, 10, true)
+            if patternName == ""
+                patternName := "AB=CD"
+        
+        // ABCD Extension
+        if abcdExt and price_ratio >= 1.272 * err_min and price_ratio <= 1.618 * err_max and abcRatio >= 0.618 * err_min and abcRatio <= 0.786 * err_max and abcdDirection != 0
+            abcd_pattern := true
+            array.set(wmLabels, 11, true)
+            if patternName == ""
+                patternName := "ABCD Ext"
+        
+        // Double Top/Bottom
+        if doubleBottomTop and (dDir == 1 and bDir == 2 and cDir == -1 or dDir == -1 and bDir == -2 and cDir == 1) and riskPerReward < MaxRiskPerReward
+            double_pattern := true
+            array.set(wmLabels, 12, true)
+            if patternName == ""
+                patternName := dir > 0 ? "Double Bottom" : "Double Top"
+        
+        // Handle pattern redrawing
+        cancelW = false
+        cancelA = false
+        cancelD = false
+        
+        if wm_pattern[1] and x == nz(x[1]) and a == nz(a[1]) and b == nz(b[1]) and c == nz(c[1])
+            line.delete(array.get(wmlines, 0))
+            line.delete(array.get(wmlines, 1))
+            line.delete(array.get(wmlines, 2))
+            line.delete(array.get(wmlines, 3))
+            line.delete(array.get(wmlines, 4))
+            line.delete(array.get(wmlines, 5))
+            line.delete(array.get(wmlines, 6))
+            line.delete(array.get(wmlines, 7))
+            label.delete(array.get(wmlabel, 0))
+            cancelW := true
+        
+        if abcd_pattern[1] and a == nz(a[1]) and b == nz(b[1]) and c == nz(c[1])
+            line.delete(array.get(wmlines, 1))
+            line.delete(array.get(wmlines, 2))
+            line.delete(array.get(wmlines, 3))
+            label.delete(array.get(wmlabel, 0))
+            cancelA := true
+        
+        if double_pattern[1] and a == nz(a[1]) and b == nz(b[1]) and c == nz(c[1])
+            line.delete(array.get(wmlines, 5))
+            label.delete(array.get(wmlabel, 0))
+            cancelD := true
+        
+        // Draw harmonic pattern lines with thin dashed style
+        patternColor = dir > 0 ? bullishColor : bearishColor
+        fillColor = color.new(patternColor, fillTransparency)
+        
+        if wm_pattern
+            xa = line.new(y1=x, y2=a, x1=xBar, x2=aBar, xloc=xloc.bar_index, color=zigzagColor, width=zigzagWidth, style=zigzagStyle)
+            ab = line.new(y1=a, y2=b, x1=aBar, x2=bBar, xloc=xloc.bar_index, color=zigzagColor, width=zigzagWidth, style=zigzagStyle)
+            bc = line.new(y1=b, y2=c, x1=bBar, x2=cBar, xloc=xloc.bar_index, color=zigzagColor, width=zigzagWidth, style=zigzagStyle)
+            cd = line.new(y1=c, y2=d, x1=cBar, x2=dBar, xloc=xloc.bar_index, color=zigzagColor, width=zigzagWidth, style=zigzagStyle)
+            xb = line.new(y1=x, y2=b, x1=xBar, x2=bBar, xloc=xloc.bar_index, color=color.new(zigzagColor, 60), width=zigzagWidth, style=line.style_dotted)
+            bd = line.new(y1=b, y2=d, x1=bBar, x2=dBar, xloc=xloc.bar_index, color=color.new(zigzagColor, 60), width=zigzagWidth, style=line.style_dotted)
+            xd = line.new(y1=x, y2=d, x1=xBar, x2=dBar, xloc=xloc.bar_index, color=color.new(zigzagColor, 60), width=zigzagWidth, style=line.style_dotted)
+            ac = line.new(y1=a, y2=c, x1=aBar, x2=cBar, xloc=xloc.bar_index, color=color.new(zigzagColor, 60), width=zigzagWidth, style=line.style_dotted)
+            
+            array.set(wmlines, 0, xa)
+            array.set(wmlines, 1, ab)
+            array.set(wmlines, 2, bc)
+            array.set(wmlines, 3, cd)
+            array.set(wmlines, 4, xb)
+            array.set(wmlines, 5, bd)
+            array.set(wmlines, 6, xd)
+            array.set(wmlines, 7, ac)
+            array.set(wmtype, 0, dir)
+            
+            // Draw line fills for pattern areas (high transparency)
+            linefill.new(xa, xb, fillColor)
+            linefill.new(xb, ab, fillColor)
+            linefill.new(ab, bc, fillColor)
+            linefill.new(bc, bd, fillColor)
+            
+            // Draw PRZ Zone
+            przClr = dir > 0 ? przBullColor : przBearColor
+            drawPRZ(d, c, x, a, dir, dBar, przBox, przClr)
+            
+            // Draw ratio labels
+            drawRatioLabels(x, xBar, a, aBar, b, bBar, c, cBar, d, dBar, xabRatio, abcRatio, bcdRatio, xadRatio, ratioLabelsArr, zigzagColor)
+        
+        if abcd_pattern and not wm_pattern
+            ab = line.new(y1=a, y2=b, x1=aBar, x2=bBar, xloc=xloc.bar_index, color=zigzagColor, width=zigzagWidth, style=zigzagStyle)
+            bc = line.new(y1=b, y2=c, x1=bBar, x2=cBar, xloc=xloc.bar_index, color=zigzagColor, width=zigzagWidth, style=zigzagStyle)
+            cd = line.new(y1=c, y2=d, x1=cBar, x2=dBar, xloc=xloc.bar_index, color=zigzagColor, width=zigzagWidth, style=zigzagStyle)
+            array.set(wmlines, 1, ab)
+            array.set(wmlines, 2, bc)
+            array.set(wmlines, 3, cd)
+            array.set(wmtype, 0, dir)
+        
+        if double_pattern and not wm_pattern
+            bd = line.new(y1=b, y2=d, x1=bBar, x2=dBar, xloc=xloc.bar_index, color=zigzagColor, width=zigzagWidth, style=zigzagStyle)
+            array.set(wmlines, 5, bd)
+            array.set(wmtype, 0, dir)
+        
+        if wm_pattern or abcd_pattern or double_pattern
+            array.set(wmlabel, 0, get_harmonic_label(wmLabels, dir, d, dBar))
+            lastHarmonyScore := harmonyScore
+            lastPatternName := patternName
+            lastPatternDir := dir
+    
+    pattern = wm_pattern and not nz(wm_pattern[1]) or abcd_pattern and not nz(abcd_pattern[1]) or double_pattern and not nz(double_pattern[1])
+    [pattern, harmonyScore, patternName]
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ║                       MAIN EXECUTION                                        ║
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Execute ZigZag calculations for all levels
+level1ZG = zigzag(zigzag1Length, zigzagpivots1, zigzagpivotbars1, zigzagpivotdirs1)
+level2ZG = outerzigzag(zigzag2Length, zigzagpivots1, zigzagpivotbars1, zigzagpivots2, zigzagpivotbars2, zigzagpivotdirs2)
+level3ZG = outerzigzag(useZigZagChain ? zigzag3Length : zigzag2Length + zigzag3Length, useZigZagChain ? zigzagpivots2 : zigzagpivots1, useZigZagChain ? zigzagpivotbars2 : zigzagpivotbars1, zigzagpivots3, zigzagpivotbars3, zigzagpivotdirs3)
+level4ZG = outerzigzag(useZigZagChain ? zigzag4Length : zigzag2Length + zigzag3Length + zigzag4Length, useZigZagChain ? zigzagpivots3 : zigzagpivots1, useZigZagChain ? zigzagpivotbars3 : zigzagpivotbars1, zigzagpivots4, zigzagpivotbars4, zigzagpivotdirs4)
+
+// Draw ZigZag lines
+draw_zigzag(zigzaglines1, zigzagpivots1, zigzagpivotbars1, zigzag1Color, showZigZag1)
+draw_zigzag(zigzaglines2, zigzagpivots2, zigzagpivotbars2, zigzag2Color, showZigZag2)
+draw_zigzag(zigzaglines3, zigzagpivots3, zigzagpivotbars3, zigzag3Color, showZigZag3)
+draw_zigzag(zigzaglines4, zigzagpivots4, zigzagpivotbars4, zigzag4Color, showZigZag4)
+
+// Detect harmonic patterns on all levels
+[wm_pattern1, score1, name1] = detect_harmonic_pattern(zigzagpivots1, zigzagpivotbars1, zigzagpivotdirs1, wmlines1, wmLabel1, wmtype1, wmLabels1, przBox1, ratioLabels1, zigzag1Color, showZigZag1)
+[wm_pattern2, score2, name2] = detect_harmonic_pattern(zigzagpivots2, zigzagpivotbars2, zigzagpivotdirs2, wmlines2, wmLabel2, wmtype2, wmLabels2, przBox2, ratioLabels2, zigzag2Color, showZigZag2)
+[wm_pattern3, score3, name3] = detect_harmonic_pattern(zigzagpivots3, zigzagpivotbars3, zigzagpivotdirs3, wmlines3, wmLabel3, wmtype3, wmLabels3, przBox3, ratioLabels3, zigzag3Color, showZigZag3)
+[wm_pattern4, score4, name4] = detect_harmonic_pattern(zigzagpivots4, zigzagpivotbars4, zigzagpivotdirs4, wmlines4, wmLabel4, wmtype4, wmLabels4, przBox4, ratioLabels4, zigzag4Color, showZigZag4)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ║                       INFO PANEL (TABLE)                                    ║
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Create Info Panel Table
+var table infoPanel = table.new(infoPanelPosition == "Top Right" ? position.top_right : infoPanelPosition == "Top Left" ? position.top_left : infoPanelPosition == "Bottom Right" ? position.bottom_right : position.bottom_left, 2, 6, bgcolor=color.new(#1E1E1E, 20), border_width=1, border_color=color.new(#444444, 0), frame_width=1, frame_color=color.new(#666666, 0))
+
+if showInfoPanel and barstate.islast
+    // Header
+    table.cell(infoPanel, 0, 0, "Harmonic Radar", text_color=color.new(#FFD700, 0), text_size=size.small, bgcolor=color.new(#2D2D2D, 0))
+    table.merge_cells(infoPanel, 0, 0, 1, 0)
+    
+    // Pattern Name
+    table.cell(infoPanel, 0, 1, "Pattern:", text_color=color.new(#AAAAAA, 0), text_size=size.tiny, text_halign=text.align_left)
+    table.cell(infoPanel, 1, 1, lastPatternName != "" ? lastPatternName : "Scanning...", text_color=lastPatternDir > 0 ? bullishColor : lastPatternDir < 0 ? bearishColor : color.new(#888888, 0), text_size=size.tiny, text_halign=text.align_right)
+    
+    // Harmony Score
+    table.cell(infoPanel, 0, 2, "Harmony:", text_color=color.new(#AAAAAA, 0), text_size=size.tiny, text_halign=text.align_left)
+    scoreColor = lastHarmonyScore >= 80 ? color.new(#00FF00, 0) : lastHarmonyScore >= 60 ? color.new(#FFFF00, 0) : lastHarmonyScore >= 40 ? color.new(#FFA500, 0) : color.new(#FF4444, 0)
+    table.cell(infoPanel, 1, 2, lastHarmonyScore > 0 ? str.tostring(lastHarmonyScore, "#.#") + "%" : "N/A", text_color=scoreColor, text_size=size.tiny, text_halign=text.align_right)
+    
+    // Direction
+    table.cell(infoPanel, 0, 3, "Direction:", text_color=color.new(#AAAAAA, 0), text_size=size.tiny, text_halign=text.align_left)
+    table.cell(infoPanel, 1, 3, lastPatternDir > 0 ? "▲ BULLISH" : lastPatternDir < 0 ? "▼ BEARISH" : "—", text_color=lastPatternDir > 0 ? bullishColor : lastPatternDir < 0 ? bearishColor : color.new(#888888, 0), text_size=size.tiny, text_halign=text.align_right)
+    
+    // Mode
+    table.cell(infoPanel, 0, 4, "Mode:", text_color=color.new(#AAAAAA, 0), text_size=size.tiny, text_halign=text.align_left)
+    table.cell(infoPanel, 1, 4, strictMode ? "STRICT (" + str.tostring(strictErrorPercent) + "%)" : "NORMAL (" + str.tostring(normalErrorPercent) + "%)", text_color=strictMode ? color.new(#00BFFF, 0) : color.new(#888888, 0), text_size=size.tiny, text_halign=text.align_right)
+    
+    // Confirmation
+    table.cell(infoPanel, 0, 5, "Confirm:", text_color=color.new(#AAAAAA, 0), text_size=size.tiny, text_halign=text.align_left)
+    table.cell(infoPanel, 1, 5, waitForConfirmation ? "✓ ENABLED" : "✗ DISABLED", text_color=waitForConfirmation ? color.new(#00FF00, 0) : color.new(#FF4444, 0), text_size=size.tiny, text_halign=text.align_right)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ║                       ALERTS                                                ║
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Alert for new pattern detection
+newPattern = wm_pattern1 or wm_pattern2 or wm_pattern3 or wm_pattern4
+alertcondition(newPattern, title='New Harmonic Pattern', message='New harmonic pattern detected on {{ticker}} - {{interval}}')
+
+// Alert for bullish patterns
+bullishPattern = (wm_pattern1 and lastPatternDir > 0) or (wm_pattern2 and lastPatternDir > 0) or (wm_pattern3 and lastPatternDir > 0) or (wm_pattern4 and lastPatternDir > 0)
+alertcondition(bullishPattern, title='Bullish Harmonic Pattern', message='Bullish harmonic pattern detected on {{ticker}}')
+
+// Alert for bearish patterns  
+bearishPattern = (wm_pattern1 and lastPatternDir < 0) or (wm_pattern2 and lastPatternDir < 0) or (wm_pattern3 and lastPatternDir < 0) or (wm_pattern4 and lastPatternDir < 0)
+alertcondition(bearishPattern, title='Bearish Harmonic Pattern', message='Bearish harmonic pattern detected on {{ticker}}')
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ║                       REQUIRED OUTPUT                                       ║
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Plot required output (Pine Script requires at least one output)
+plot(na, title="Hidden", display=display.none)
+
+// Plot pattern signals for visibility
+plotshape(wm_pattern1 and lastPatternDir > 0, title="Bullish L1", style=shape.triangleup, location=location.belowbar, color=bullishColor, size=size.tiny)
+plotshape(wm_pattern1 and lastPatternDir < 0, title="Bearish L1", style=shape.triangledown, location=location.abovebar, color=bearishColor, size=size.tiny)

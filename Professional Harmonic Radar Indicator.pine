@@ -20,11 +20,21 @@ colorScheme = input.string('Gold/Gray', 'Color Scheme', options=['Gold/Gray', 'T
 showLabels = input.bool(true, 'Show Ratio Labels')
 showPRZ = input.bool(true, 'Show PRZ (Potential Reversal Zone)')
 fillTransparency = input.int(85, 'Fill Transparency', minval=70, maxval=95)
+przWidth = input.int(10, 'PRZ Width (bars before)', minval=5, maxval=50)
+przExtension = input.int(20, 'PRZ Extension (bars after)', minval=10, maxval=100)
+przSize = input.float(0.01, 'PRZ Zone Size (%)', minval=0.005, maxval=0.05, step=0.005)
 
 // الألوان / Colors
 bullishColor = colorScheme == 'Gold/Gray' ? color.new(#FFD700, 30) : color.new(#008B8B, 30)
 bearishColor = colorScheme == 'Gold/Gray' ? color.new(#808080, 30) : color.new(#C0C0C0, 30)
 przColor = color.new(bullishColor, fillTransparency)
+
+// ========================================
+// ثوابت النظام / System Constants
+// ========================================
+
+MIN_PIVOT_LOWS = 5  // الحد الأدنى لعدد القيعان المطلوبة / Minimum required pivot lows
+MIN_PIVOT_HIGHS = 4  // الحد الأدنى لعدد القمم المطلوبة / Minimum required pivot highs
 
 // ========================================
 // متغيرات النظام / System Variables
@@ -112,7 +122,7 @@ if barstate.islast and array.size(pivotHighPrices) > 0 and array.size(pivotLowPr
             array.push(allBars, array.get(pivotLowBars, i))
             array.push(allIsHigh, false)
     
-    // ترتيب حسب الوقت / Sort by time using insertion sort (more efficient than bubble sort)
+    // ترتيب حسب الوقت (من الأحدث للأقدم) / Sort by time (most recent first) using insertion sort
     if array.size(allBars) > 1
         for i = 1 to array.size(allBars) - 1
             keyPrice = array.get(allPrices, i)
@@ -120,8 +130,8 @@ if barstate.islast and array.size(pivotHighPrices) > 0 and array.size(pivotLowPr
             keyIsHigh = array.get(allIsHigh, i)
             j = i - 1
             
-            // Shift elements that are less than key to the right
-            while j >= 0 and array.get(allBars, j) < keyBar
+            // Shift elements that are greater than key to the right (descending order)
+            while j >= 0 and array.get(allBars, j) > keyBar
                 array.set(allPrices, j + 1, array.get(allPrices, j))
                 array.set(allBars, j + 1, array.get(allBars, j))
                 array.set(allIsHigh, j + 1, array.get(allIsHigh, j))
@@ -246,22 +256,23 @@ checkCypher(xPrice, aPrice, bPrice, cPrice, dPrice) =>
     
     [isCypher, XAB, ABC, XAD]
 
-// دالة للتحقق من نموذج Shark
+// دالة للتحقق من نموذج Shark (Scott Carney specifications)
 checkShark(xPrice, aPrice, bPrice, cPrice, dPrice) =>
+    XA = math.abs(aPrice - xPrice)
     AB = math.abs(bPrice - aPrice)
     BC = math.abs(cPrice - bPrice)
     CD = math.abs(dPrice - cPrice)
-    XA = math.abs(aPrice - xPrice)
     
-    ABC_ratio = BC / AB
-    BCD = CD / BC
+    XAB = AB / XA
+    ABC = BC / AB
     XAD = math.abs(dPrice - xPrice) / XA
     
-    isShark = checkRatioRange(ABC_ratio, 1.13, 1.618) and 
-               checkRatioRange(BCD, 1.618, 2.24) and 
+    // Shark pattern: XAB should be around 0.886, ABC between 1.13-1.618, XAD between 0.886-1.13
+    isShark = checkRatio(XAB, 0.886) and 
+               checkRatioRange(ABC, 1.13, 1.618) and 
                checkRatioRange(XAD, 0.886, 1.13)
     
-    [isShark, ABC_ratio, BCD, XAD]
+    [isShark, XAB, ABC, XAD]
 
 // ========================================
 // فحص وعرض النماذج / Scan and Display Patterns
@@ -271,14 +282,14 @@ var string detectedPattern = ''
 var float harmonyScore = 0.0
 var box przBox = na
 
-if barstate.islast and array.size(pivotHighPrices) >= 4 and array.size(pivotLowPrices) >= 5
+if barstate.islast and array.size(pivotHighPrices) >= MIN_PIVOT_HIGHS and array.size(pivotLowPrices) >= MIN_PIVOT_LOWS
     // مسح الملصقات القديمة / Clear old labels
     for i = 0 to array.size(patternLabels) - 1
         label.delete(array.get(patternLabels, i))
     array.clear(patternLabels)
     
     // محاولة إيجاد نمط صعودي / Try to find bullish pattern
-    if array.size(pivotLowPrices) >= 5 and array.size(pivotHighPrices) >= 4
+    if array.size(pivotLowPrices) >= MIN_PIVOT_LOWS and array.size(pivotHighPrices) >= MIN_PIVOT_HIGHS
         // X=Low, A=High, B=Low, C=High, D=Low
         xPrice = array.get(pivotLowPrices, 4)
         xBar = array.get(pivotLowBars, 4)
@@ -314,9 +325,9 @@ if barstate.islast and array.size(pivotHighPrices) >= 4 and array.size(pivotLowP
                 
                 // رسم PRZ / Draw PRZ
                 if showPRZ
-                    przLow = dPrice * 0.99
-                    przHigh = dPrice * 1.01
-                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                    przLow = dPrice * (1 - przSize)
+                    przHigh = dPrice * (1 + przSize)
+                    przBox := box.new(dBar - przWidth, przLow, bar_index + przExtension, przHigh, 
                                        border_color=bullishColor, bgcolor=przColor, 
                                        border_width=1, border_style=line.style_dashed)
             
@@ -339,9 +350,9 @@ if barstate.islast and array.size(pivotHighPrices) >= 4 and array.size(pivotLowP
                     array.push(patternLabels, lbl)
                 
                 if showPRZ
-                    przLow = dPrice * 0.99
-                    przHigh = dPrice * 1.01
-                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                    przLow = dPrice * (1 - przSize)
+                    przHigh = dPrice * (1 + przSize)
+                    przBox := box.new(dBar - przWidth, przLow, bar_index + przExtension, przHigh, 
                                        border_color=bullishColor, bgcolor=przColor, 
                                        border_width=1, border_style=line.style_dashed)
             
@@ -364,9 +375,9 @@ if barstate.islast and array.size(pivotHighPrices) >= 4 and array.size(pivotLowP
                     array.push(patternLabels, lbl)
                 
                 if showPRZ
-                    przLow = dPrice * 0.985
-                    przHigh = dPrice * 1.015
-                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                    przLow = dPrice * (1 - przSize)
+                    przHigh = dPrice * (1 + przSize)
+                    przBox := box.new(dBar - przWidth, przLow, bar_index + przExtension, przHigh, 
                                        border_color=bullishColor, bgcolor=przColor, 
                                        border_width=1, border_style=line.style_dashed)
             
@@ -389,9 +400,9 @@ if barstate.islast and array.size(pivotHighPrices) >= 4 and array.size(pivotLowP
                     array.push(patternLabels, lbl)
                 
                 if showPRZ
-                    przLow = dPrice * 0.98
-                    przHigh = dPrice * 1.02
-                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                    przLow = dPrice * (1 - przSize)
+                    przHigh = dPrice * (1 + przSize)
+                    przBox := box.new(dBar - przWidth, przLow, bar_index + przExtension, przHigh, 
                                        border_color=bullishColor, bgcolor=przColor, 
                                        border_width=1, border_style=line.style_dashed)
             
@@ -415,9 +426,9 @@ if barstate.islast and array.size(pivotHighPrices) >= 4 and array.size(pivotLowP
                     array.push(patternLabels, lbl)
                 
                 if showPRZ
-                    przLow = dPrice * 0.98
-                    przHigh = dPrice * 1.02
-                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                    przLow = dPrice * (1 - przSize)
+                    przHigh = dPrice * (1 + przSize)
+                    przBox := box.new(dBar - przWidth, przLow, bar_index + przExtension, przHigh, 
                                        border_color=bullishColor, bgcolor=przColor, 
                                        border_width=1, border_style=line.style_dashed)
             
@@ -440,9 +451,9 @@ if barstate.islast and array.size(pivotHighPrices) >= 4 and array.size(pivotLowP
                     array.push(patternLabels, lbl)
                 
                 if showPRZ
-                    przLow = dPrice * 0.99
-                    przHigh = dPrice * 1.01
-                    przBox := box.new(dBar - 10, przLow, bar_index + 20, przHigh, 
+                    przLow = dPrice * (1 - przSize)
+                    przHigh = dPrice * (1 + przSize)
+                    przBox := box.new(dBar - przWidth, przLow, bar_index + przExtension, przHigh, 
                                        border_color=bullishColor, bgcolor=przColor, 
                                        border_width=1, border_style=line.style_dashed)
 

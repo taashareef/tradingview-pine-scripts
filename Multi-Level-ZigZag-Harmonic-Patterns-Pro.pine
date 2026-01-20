@@ -298,7 +298,7 @@ calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, patternType) =>
         idealBCD := 1.272
         idealXAD := 0.786
     else if patternType == "Bat"
-        idealXAB := 0.440
+        idealXAB := 0.450  // Range: 0.382 - 0.50, ideal midpoint
         idealABC := 0.618
         idealBCD := 2.0
         idealXAD := 0.886
@@ -310,7 +310,7 @@ calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, patternType) =>
     else if patternType == "Crab"
         idealXAB := 0.500
         idealABC := 0.618
-        idealBCD := 3.14
+        idealBCD := 3.146  // CRAB_BCD_RATIO based on Scott Carney (2.618 - 3.618 range)
         idealXAD := 1.618
     else if patternType == "DeepCrab"
         idealXAB := 0.886
@@ -479,7 +479,11 @@ detect_harmonic_pattern(zigzagpivots, zigzagpivotbars, zigzagpivotdirs, wmlines,
         
         time_ratio = cdTime / abTime
         price_ratio = cdPrice / abPrice
-        abcdDirection = a < b and a < c and c < b and c < d and a < d and b < d ? 1 : a > b and a > c and c > b and c > d and a > d and b > d ? -1 : 0
+        
+        // ABCD Direction Detection (broken into readable conditions)
+        isBullishABCD = a < b and a < c and c < b and c < d and a < d and b < d
+        isBearishABCD = a > b and a > c and c > b and c > d and a > d and b > d
+        abcdDirection = isBullishABCD ? 1 : isBearishABCD ? -1 : 0
         
         risk = math.abs(b - d)
         reward = math.abs(c - d)
@@ -533,8 +537,8 @@ detect_harmonic_pattern(zigzagpivots, zigzagpivotbars, zigzagpivotdirs, wmlines,
                     harmonyScore := newScore
                     patternName := "Butterfly"
             
-            // Shark Pattern
-            if shark and abcRatio >= 1.13 * err_min and abcRatio <= 1.618 * err_max and bcdRatio >= 1.618 * err_min and bcdRatio <= 2.24 * err_max and xadRatio >= 0.886 * err_min and xadRatio <= 1.13 * err_max
+            // Shark Pattern (includes XAB ratio check)
+            if shark and xabRatio >= 0.382 * err_min and xabRatio <= 0.618 * err_max and abcRatio >= 1.13 * err_min and abcRatio <= 1.618 * err_max and bcdRatio >= 1.618 * err_min and bcdRatio <= 2.24 * err_max and xadRatio >= 0.886 * err_min and xadRatio <= 1.13 * err_max
                 wm_pattern := true
                 array.set(wmLabels, 5, true)
                 newScore = calcHarmonyScore(xabRatio, abcRatio, bcdRatio, xadRatio, "Shark")
